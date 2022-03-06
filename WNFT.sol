@@ -3,14 +3,10 @@ pragma solidity 0.8.9;
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
 
-interface IAsset {
-    // solhint-disable-previous-line no-empty-blocks
-}
 
-//need to make zapper work for relicquary
 interface IZapComp {
-    function composeZapIn(IAsset[] calldata tokens, uint[] calldata weights, bytes32 pid) external payable;
-    function composeZapOut(IAsset[] calldata tokens, uint[] calldata amounts) external;
+    function composeZapIn(uint loadOut, address[] calldata swapTargets, bytes[] calldata swapData, uint[] calldata mins) external payable returns(uint[] memory ids);
+    function composeZapOut(uint[] memory relicIds, uint loadOut, address[][] memory swapTargets, bytes[][] memory swapData, uint[] calldata mins, address ogSender) external;
 }
 
 
@@ -42,31 +38,37 @@ contract IMM_NFT is ERC721Enumerable, Ownable {
     }
 
     modifier onlyOwnedRelic(uint256 tokenId, address sender) {
-        //this rly needs to check if sender is the owner of the wnft that the relic points to in _relicOwners 
+        //checks if sender owns the tokenId relic
         require(IERC721(this).ownerOf(_relicOwners[tokenId]) == sender);
         _;
     }
 
-    //Implement a minting function that zaps in
-    //Implement a burning function that zaps out
-    //Implement the burning function mints a new NFT of some kind nirvana/rebirth theme
 
-    function mint(address to, IAsset[] calldata tokens, uint[] calldata weights, bytes32 pid) internal returns (uint256 id) {
+    //TODO: make it so the burning function mints a new NFT of some kind nirvana/rebirth theme
+
+    function mint(address to, uint loadOut, address[] calldata swapTargets, bytes[] calldata swapData, uint[] calldata mins) internal returns (uint256 id) {
         id = nonce++;
         _safeMint(to, id);
-        zapper.composeZapIn(tokens, weights, pid);
+        uint[] memory relicIds = zapper.composeZapIn(loadOut, swapTargets, swapData, mins);
+        for(uint i=0;i<relicIds.length;i++){
+            _relicOwners[relicIds[i]] = id;
+        }
 
-        //_relicOwners[relicId0] = id;
-        //_relicOwners[relicId0] = id;
-        //zap in and map the relic ids to the wnft id
+        
     }
 
-    function burn(uint256 tokenId, IAsset[] calldata tokens, uint[] calldata amounts) internal returns (bool) {
+    function burn(uint256 tokenId, uint[] memory relicIds, uint loadOut, address[][] memory swapTargets, bytes[][] memory swapData, uint[] calldata mins, address ogSender) internal returns (bool) {
         _burn(tokenId);
-        zapper.composeZapOut(tokens, amounts);
-        return true;
+        zapper.composeZapOut(relicIds, loadOut, swapTargets, swapData, mins, ogSender);
+        
         //zap out and kill the mapping entry
-        //Mint a nirvana nft
+        for(uint i=0;i<relicIds.length;i++){
+            delete _relicOwners[relicIds[i]];
+        }
+        //TODO: Mint a nirvana nft
+
+
+        return true;
     }
 
 }
